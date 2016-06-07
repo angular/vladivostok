@@ -21,8 +21,9 @@ import 'rxjs/add/operator/scan';
 import 'rxjs/add/operator/mergeMap';
 import 'rxjs/add/operator/concat';
 import 'rxjs/add/operator/concatMap';
+import 'rxjs/add/operator/every';
+import 'rxjs/add/observable/from';
 import {of} from 'rxjs/observable/of';
-import {forkJoin} from 'rxjs/observable/forkJoin';
 
 export interface NavigationExtras { relativeTo?: ActivatedRoute; queryParams?: Params; fragment?: string; }
 
@@ -273,7 +274,7 @@ class GuardChecks {
     const currRoot = this.curr ? this.curr._root : null;
     this.traverseChildRoutes(futureRoot, currRoot, parentOutletMap);
     if (this.checks.length === 0) return of(true);
-    return forkJoin(this.checks.map(s => {
+    return Observable.from(this.checks).mergeMap(s => {
       if (s instanceof CanActivate) {
         return this.runCanActivate(s.route);
       } else if (s instanceof CanDeactivate) {
@@ -281,7 +282,7 @@ class GuardChecks {
       } else {
         throw new Error("Cannot be reached");
       }
-    })).map(and);
+    }).every(result => result === true);
   }
 
   private traverseChildRoutes(futureNode: TreeNode<ActivatedRouteSnapshot>,
@@ -323,27 +324,27 @@ class GuardChecks {
   private runCanActivate(future: ActivatedRouteSnapshot): Observable<boolean> {
     const canActivate = future._routeConfig ? future._routeConfig.canActivate : null;
     if (!canActivate || canActivate.length === 0) return of(true);
-    return forkJoin(canActivate.map(c => {
+    return Observable.from(canActivate).mergeMap(c => {
       const guard = this.injector.get(c);
       if (guard.canActivate) {
         return wrapIntoObservable(guard.canActivate(future, this.future));
       } else {
         return wrapIntoObservable(guard(future, this.future));
       }
-    })).map(and);
+    }).every(result => result === true);
   }
 
   private runCanDeactivate(component: Object, curr: ActivatedRouteSnapshot): Observable<boolean> {
     const canDeactivate = curr._routeConfig ? curr._routeConfig.canDeactivate : null;
     if (!canDeactivate || canDeactivate.length === 0) return of(true);
-    return forkJoin(canDeactivate.map(c => {
+    return Observable.from(canDeactivate).mergeMap(c => {
       const guard = this.injector.get(c);
       if (guard.canDeactivate) {
         return wrapIntoObservable(guard.canDeactivate(component, curr, this.curr));
       } else {
         return wrapIntoObservable(guard(component, curr, this.curr));
       }
-    })).map(and);
+    }).every(result => result === true);
   }
 }
 
