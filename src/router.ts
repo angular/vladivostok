@@ -241,10 +241,10 @@ export class Router {
    */
   parseUrl(url: string): UrlTree { return this.urlSerializer.parse(url); }
 
-  private scheduleNavigation(url: UrlTree, pop: boolean): Promise<boolean> {
+  private scheduleNavigation(url: UrlTree, preventPushState: boolean): Promise<boolean> {
     const id = ++this.navigationId;
     this.routerEvents.next(new NavigationStart(id, this.serializeUrl(url)));
-    return Promise.resolve().then((_) => this.runNavigate(url, false, id));
+    return Promise.resolve().then((_) => this.runNavigate(url, preventPushState, id));
   }
 
   private setUpLocationChangeListener(): void {
@@ -253,7 +253,7 @@ export class Router {
     });
   }
 
-  private runNavigate(url: UrlTree, pop: boolean, id: number): Promise<boolean> {
+  private runNavigate(url: UrlTree, preventPushState: boolean, id: number): Promise<boolean> {
     if (id !== this.navigationId) {
       this.location.go(this.urlSerializer.serialize(this.currentUrlTree));
       this.routerEvents.next(new NavigationCancel(id, this.serializeUrl(url)));
@@ -291,7 +291,6 @@ export class Router {
           })
           .forEach((shouldActivate) => {
             if (!shouldActivate || id !== this.navigationId) {
-              this.location.go(this.urlSerializer.serialize(this.currentUrlTree));
               this.routerEvents.next(new NavigationCancel(id, this.serializeUrl(url)));
               return Promise.resolve(false);
             }
@@ -300,8 +299,13 @@ export class Router {
 
             this.currentUrlTree = updatedUrl;
             this.currentRouterState = state;
-            if (!pop) {
-              this.location.go(this.urlSerializer.serialize(updatedUrl));
+            if (!preventPushState) {
+              let path = this.urlSerializer.serialize(updatedUrl);
+              if (this.location.isCurrentPathEqualTo(path)) {
+                this.location.replaceState(path);
+              } else {
+                this.location.go(path);
+              }
             }
           })
           .then(
