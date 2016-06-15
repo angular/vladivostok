@@ -244,7 +244,7 @@ export class Router {
   private scheduleNavigation(url: UrlTree, pop: boolean): Promise<boolean> {
     const id = ++this.navigationId;
     this.routerEvents.next(new NavigationStart(id, this.serializeUrl(url)));
-    return Promise.resolve().then((_) => this.runNavigate(url, false, id));
+    return Promise.resolve().then((_) => this.runNavigate(url, pop, id));
   }
 
   private setUpLocationChangeListener(): void {
