@@ -392,7 +392,9 @@ class GuardChecks {
       }
       this.traverseChildRoutes(futureNode, currNode, outlet ? outlet.outletMap : null);
     } else {
-      this.deactivateOutletAndItChildren(curr, outlet);
+      if (curr) {    	
+      	this.deactivateOutletAndItChildren(curr, outlet);
+      }
       this.checks.push(new CanActivate(future));
       this.traverseChildRoutes(futureNode, null, outlet ? outlet.outletMap : null);
     }
