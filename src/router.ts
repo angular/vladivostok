@@ -386,27 +386,55 @@ class GuardChecks {
     const curr = currNode ? currNode.value : null;
     const outlet = parentOutletMap ? parentOutletMap._outlets[futureNode.value.outlet] : null;
 
+    // reusing the node
     if (curr && future._routeConfig === curr._routeConfig) {
       if (!shallowEqual(future.params, curr.params)) {
         this.checks.push(new CanDeactivate(outlet.component, curr), new CanActivate(future));
       }
-      this.traverseChildRoutes(futureNode, currNode, outlet ? outlet.outletMap : null);
+
+      // If we have a component, we need to go through an outlet.
+      // Otherwise, this route is not represented in the component tree.
+      if (future.component) {
+        this.traverseChildRoutes(futureNode, currNode, outlet ? outlet.outletMap : null);
+      } else {
+        this.traverseChildRoutes(futureNode, currNode, parentOutletMap);
+      }
     } else {
-      this.deactivateOutletAndItChildren(curr, outlet);
+      // if we had a componentless route, we need to deactivate everything!
+      if (curr) {
+        if (curr.component) {
+          this.deactivateOutletAndItChildren(curr, outlet);
+        } else {
+          this.deactivateOutletMap(parentOutletMap);
+        }
+      }
+
+      // if we have a component, we need to deactivate its outlet, run canActivate,
+      // and then traverse its children with the outlet map from that outlet.
+      // Otherwise, this route is not represented in the component tree,
+      // so we reuse the parent map.
       this.checks.push(new CanActivate(future));
-      this.traverseChildRoutes(futureNode, null, outlet ? outlet.outletMap : null);
+      if (future.component) {
+        this.traverseChildRoutes(futureNode, null, outlet ? outlet.outletMap : null);
+      } else {
+        this.traverseChildRoutes(futureNode, null, parentOutletMap);
+      }
     }
   }
 
   private deactivateOutletAndItChildren(route: ActivatedRouteSnapshot, outlet: RouterOutlet): void {
     if (outlet && outlet.isActivated) {
-      forEach(outlet.outletMap._outlets, (v: RouterOutlet) => {
-        if (v.isActivated) {
-          this.deactivateOutletAndItChildren(v.activatedRoute.snapshot, v);
-        }
-      });
+      this.deactivateOutletMap(outlet.outletMap);
       this.checks.push(new CanDeactivate(outlet.component, route));
     }
+  }
+
+  private deactivateOutletMap(outletMap: RouterOutletMap): void {
+    forEach(outletMap._outlets, (v: RouterOutlet) => {
+      if (v.isActivated) {
+        this.deactivateOutletAndItChildren(v.activatedRoute.snapshot, v);
+      }
+    });
   }
 
   private runCanActivate(future: ActivatedRouteSnapshot): Observable<boolean> {
@@ -431,6 +459,7 @@ class GuardChecks {
     return Observable.from(canDeactivate)
         .map(c => {
           const guard = this.injector.get(c);
+
           if (guard.canDeactivate) {
             return wrapIntoObservable(guard.canDeactivate(component, curr, this.curr));
           } else {
@@ -480,35 +509,65 @@ class ActivateRoutes {
     const future = futureNode.value;
     const curr = currNode ? currNode.value : null;
 
-    const outlet = getOutlet(parentOutletMap, futureNode.value);
-
+    // reusing the node
     if (future === curr) {
+      // advance the route to push the parameters
       advanceActivatedRoute(future);
-      this.activateChildRoutes(futureNode, currNode, outlet.outletMap);
+
+      // If we have a component, we need to go through an outlet.
+      // Otherwise, this route is not represented in the component tree.
+      if (future.component) {
+        const outlet = getOutlet(parentOutletMap, futureNode.value);
+        this.activateChildRoutes(futureNode, currNode, outlet.outletMap);
+      } else {
+        this.activateChildRoutes(futureNode, currNode, parentOutletMap);
+      }
     } else {
-      this.deactivateOutletAndItChildren(outlet);
-      const outletMap = new RouterOutletMap();
-      this.activateNewRoutes(outletMap, future, outlet);
-      this.activateChildRoutes(futureNode, null, outletMap);
+      // if we had a componentless route, we need to deactivate everything!
+      if (curr) {
+        if (curr.component) {
+          const outlet = getOutlet(parentOutletMap, futureNode.value);
+          this.deactivateOutletAndItChildren(outlet);
+        } else {
+          this.deactivateOutletMap(parentOutletMap);
+        }
+      }
+
+      // if we have a component, we need to advance the route
+      // and place the component into the outlet.
+      // Otherwise, this route is not represented in the component tree.
+      if (future.component) {
+        // this.deactivateOutletAndItChildren(outlet);
+        advanceActivatedRoute(future);
+        const outlet = getOutlet(parentOutletMap, futureNode.value);
+        const outletMap = new RouterOutletMap();
+        this.placeComponentIntoOutlet(outletMap, future, outlet);
+        this.activateChildRoutes(futureNode, null, outletMap);
+      } else {
+        advanceActivatedRoute(future);
+        this.activateChildRoutes(futureNode, null, parentOutletMap);
+      }
     }
   }
 
-  private activateNewRoutes(
+  private placeComponentIntoOutlet(
       outletMap: RouterOutletMap, future: ActivatedRoute, outlet: RouterOutlet): void {
     const resolved = ReflectiveInjector.resolve([
       {provide: ActivatedRoute, useValue: future},
       {provide: RouterOutletMap, useValue: outletMap}
     ]);
-    advanceActivatedRoute(future);
     outlet.activate(future._futureSnapshot._resolvedComponentFactory, future, resolved, outletMap);
   }
 
   private deactivateOutletAndItChildren(outlet: RouterOutlet): void {
     if (outlet && outlet.isActivated) {
-      forEach(
-          outlet.outletMap._outlets, (v: RouterOutlet) => this.deactivateOutletAndItChildren(v));
+      this.deactivateOutletMap(outlet.outletMap);
       outlet.deactivate();
     }
+  }
+
+  private deactivateOutletMap(outletMap: RouterOutletMap): void {
+    forEach(outletMap._outlets, (v: RouterOutlet) => this.deactivateOutletAndItChildren(v));
   }
 }
 
