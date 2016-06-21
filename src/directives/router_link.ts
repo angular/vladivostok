@@ -1,5 +1,5 @@
 import {LocationStrategy} from '@angular/common';
-import {Directive, HostBinding, HostListener, Input, OnChanges} from '@angular/core';
+import {Directive, HostBinding, Attribute, HostListener, Input, OnChanges} from '@angular/core';
 
 import {Router} from '../router';
 import {ActivatedRoute} from '../router_state';
@@ -32,10 +32,11 @@ import {UrlTree} from '../url_tree';
  * instead look in the current component's children for the route.
  * And if the segment begins with `../`, the router will go up one level.
  */
-@Directive({selector: '[routerLink]'})
+@Directive({selector: '[routerLink],[router-link]'})
 export class RouterLink implements OnChanges {
   @Input() target: string;
   private commands: any[] = [];
+  private routerLinkAttr: string;
   @Input() queryParams: {[k: string]: any};
   @Input() fragment: string;
 
@@ -49,7 +50,13 @@ export class RouterLink implements OnChanges {
    */
   constructor(
       private router: Router, private route: ActivatedRoute,
-      private locationStrategy: LocationStrategy) {}
+      private locationStrategy: LocationStrategy,
+      @Attribute('router-link') routerLinkAttr?: string) {
+    if (routerLinkAttr) {
+      this.commands = [routerLinkAttr];  
+    }
+        
+  }
 
   @Input()
   set routerLink(data: any[]|string) {
